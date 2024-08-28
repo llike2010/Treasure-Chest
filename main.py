@@ -160,12 +160,10 @@ def getData(url):
         return []
 
 
-
 if __name__ == '__main__':
     # test the head
     # print(heads())
     # print(test_user_agent() == heads())
-
 
     data = getData(url)
     print(data)
