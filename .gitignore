@@ -1,0 +1,5 @@
+# 忽略 PyCharm 的相关文件
+.idea/
+*.iml
+*.pyc
+__pycache__/

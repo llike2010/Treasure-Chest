@@ -31,6 +31,15 @@ from bs4 import BeautifulSoup
 url = 'https://en.wikipedia.org/wiki/Main_Page'
 
 
+# ip list
+proxy_list = [
+    {"http": "http://101.200.127.149:3129"},
+    {"http": "http://59.55.162.4:3256"},
+    {"http": "http://180.122.147.76:3000"},
+    {"http": "http://114.230.107.102:3256"},
+    {"http": "http://121.230.211.163:3256"}
+]
+
 # headers
 # UserAgent可行性测试
 # URL: http://httpbin.org/user-agent
@@ -82,7 +91,7 @@ def heads():
     return head
 
 
-def test_user_agent():
+def check_user_agent():
     url = "https://httpbin.org/user-agent"
     request = urllib.request.Request(url, headers=heads())
 
@@ -123,6 +132,7 @@ def askURL(url):
         return
 
     request = urllib.request.Request(url, headers=heads())
+
     html = ""
 
     try:
@@ -160,12 +170,10 @@ def getData(url):
         return []
 
 
-
 if __name__ == '__main__':
     # test the head
     # print(heads())
-    # print(test_user_agent() == heads())
-
+    # print(check_user_agent() == heads())
 
     data = getData(url)
     print(data)
