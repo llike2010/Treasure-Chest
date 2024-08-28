@@ -109,6 +109,26 @@ def check_user_agent():
         print(f"Unexpected error: {e}")
 
 
+# check the ip
+def check_ip(ip_list):
+    for i in range(len(ip_list) - 1, -1, -1):  # 逆序遍历列表
+        ip = ip_list[i]
+        proxy_handler = urllib.request.ProxyHandler({'http': ip.get("http"), 'https': ip.get("https")})
+        opener = urllib.request.build_opener(proxy_handler)
+        urllib.request.install_opener(opener)
+
+        try:
+            # 发送 GET 请求，将获取的每个 IP 地址设置为代理
+            response = urllib.request.urlopen("http://httpbin.org/ip", timeout=3)
+            print(f'IP 地址：{ip.get("http")}有效')
+        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+            # 失败则输出 IP 地址无效，并从列表中移除
+            print(f'IP 地址：{ip.get("http")}无效, 原因: {e}')
+            ip_list.pop(i)  # 从列表中移除无效IP
+
+    return ip_list
+
+
 # Send request to the goal website
 # Make sure about the website allows to fetch
 def can_fetch(url, user_agent=None):
@@ -125,14 +145,18 @@ def can_fetch(url, user_agent=None):
     return rp.can_fetch(user_agent, url)
 
 
-#
-def askURL(url):
+def askURL(url, ip):
     if not can_fetch(url):
         print(f"访问被 robots.txt 禁止: {url}")
         return
 
-    request = urllib.request.Request(url, headers=heads())
+    if valid_proxy_list:
+        proxy = random.choice(valid_proxy_list)
+        proxy_handler = urllib.request.ProxyHandler({'http': proxy.get("http"), 'https': proxy.get("https")})
+        opener = urllib.request.build_opener(proxy_handler)
+        urllib.request.install_opener(opener)
 
+    request = urllib.request.Request(url, headers=heads())
     html = ""
 
     try:
@@ -148,9 +172,9 @@ def askURL(url):
     return html
 
 
-def getData(url):
+def getData(url, ip):
     try:
-        html = askURL(url)
+        html = askURL(url, ip)
         if not html:
             return []
 
@@ -175,5 +199,6 @@ if __name__ == '__main__':
     # print(heads())
     # print(check_user_agent() == heads())
 
-    data = getData(url)
+    valid_proxy_list = check_ip(proxy_list)  # 筛选有效的代理IP
+    data = getData(url, valid_proxy_list)  # 使用有效的代理IP请求数据
     print(data)
