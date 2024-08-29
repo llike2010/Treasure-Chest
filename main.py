@@ -5,7 +5,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import urllib.robotparser
-
+from lxml import etree
 from bs4 import BeautifulSoup
 
 # 1. Wikipedia
@@ -28,17 +28,41 @@ from bs4 import BeautifulSoup
 # BBC新闻主页有大量的新闻文章，可以尝试抓取标题、日期、摘要等信息。
 
 # URL
-url = 'https://en.wikipedia.org/wiki/Main_Page'
+url = 'https://www.zhihu.com'
 
 
 # ip list
-proxy_list = [
-    {"http": "http://101.200.127.149:3129"},
-    {"http": "http://59.55.162.4:3256"},
-    {"http": "http://180.122.147.76:3000"},
-    {"http": "http://114.230.107.102:3256"},
-    {"http": "http://121.230.211.163:3256"}
-]
+# URL: https://www.kuaidaili.com/free
+# 这个网站有免费的国外代理渠道
+def send_ip_request(page):
+    print("=============正在抓取第{}页===========".format(page))
+    base_url = 'https://www.kuaidaili.com/free/fps/{}/'.format(page)
+
+    try:
+        response = urllib.request.urlopen(urllib.request.Request(base_url, headers=heads()))
+        data = response.read().decode('utf-8')
+        time.sleep(1)  # 避免请求过快
+        return data
+    except Exception as e:
+        print(f"抓取第{page}页时出错: {e}")
+        return None
+
+
+def parse_ip_data(data):
+    proxy_list = []
+    html_data = etree.HTML(data)
+    parse_list = html_data.xpath('//table[@class="table table-bordered table-striped"]/tbody/tr')
+
+    for tr in parse_list:
+        proxies_dict = {}
+        http_type = tr.xpath('./td[4]/text()')[0]
+        ip_num = tr.xpath('./td[1]/text()')[0]
+        port_num = tr.xpath('./td[2]/text()')[0]
+
+        proxies_dict[http_type.lower()] = f"{ip_num}:{port_num}"
+        proxy_list.append(proxies_dict)
+
+    return proxy_list
 
 # headers
 # UserAgent可行性测试
@@ -195,10 +219,33 @@ def getData(url, ip):
 
 
 if __name__ == '__main__':
-    # test the head
-    # print(heads())
-    # print(check_user_agent() == heads())
+    try:
+        # 测试 User-Agent 头部信息
+        user_agent_test_result = check_user_agent() == heads()
+        if not user_agent_test_result:
+            raise ValueError("User-Agent 检查失败")
+        print(f"User-Agent 测试结果: {user_agent_test_result}")
 
-    valid_proxy_list = check_ip(proxy_list)  # 筛选有效的代理IP
-    data = getData(url, valid_proxy_list)  # 使用有效的代理IP请求数据
-    print(data)
+        # 获取并解析代理IP列表
+        page = 3  # 你可以根据需要调整页码
+        proxy_data = send_ip_request(page)
+
+        if proxy_data:
+            ip_list = parse_ip_data(proxy_data)
+            if ip_list:
+                valid_proxy_list = check_ip(ip_list)
+
+                # 使用有效的代理IP请求数据
+                data = getData(url, valid_proxy_list)
+                print(f"抓取的数据: {data}")
+            else:
+                raise ValueError("未能解析到任何代理IP")
+        else:
+            raise ValueError("未能获取到任何代理IP数据")
+
+    except ValueError as ve:
+        print(f"发生错误 (代码 101): {ve}")
+    except Exception as e:
+        print(f"发生未知错误 (代码 102): {e}")
+    finally:
+        print("程序执行完毕。")
