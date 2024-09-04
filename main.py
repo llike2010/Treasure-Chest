@@ -5,6 +5,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import urllib.robotparser
+import concurrent.futures
 from lxml import etree
 from bs4 import BeautifulSoup
 
@@ -115,22 +116,24 @@ def heads():
     return head
 
 
-def check_user_agent():
+def check_user_agent(user_agent):
     url = "https://httpbin.org/user-agent"
-    request = urllib.request.Request(url, headers=heads())
+    request = urllib.request.Request(url, headers={"User-Agent": user_agent})
 
     try:
         response = urllib.request.urlopen(request)
-        print(response.read().decode("utf-8"))
-
+        user_agent_info = response.read().decode("utf-8")
+        print(f"来自 httpbin.org 的 User-Agent 信息: {user_agent_info}")
+        if user_agent in user_agent_info:
+            return user_agent  # 返回验证通过的 User-Agent
+        return None  # 验证失败
     except urllib.error.HTTPError as e:
         print(f"HTTPError: {e.code} - {e.reason}")
-
     except urllib.error.URLError as e:
         print(f"URLError: {e.reason}")
-
     except Exception as e:
         print(f"Unexpected error: {e}")
+    return None
 
 
 # check the ip
@@ -169,24 +172,28 @@ def can_fetch(url, user_agent=None):
     return rp.can_fetch(user_agent, url)
 
 
-def askURL(url, ip):
-    if not can_fetch(url):
+def askURL(url, ip_list, verified_user_agent):
+    if not can_fetch(url, verified_user_agent):
         print(f"访问被 robots.txt 禁止: {url}")
         return
 
-    if valid_proxy_list:
-        proxy = random.choice(valid_proxy_list)
+    # 确保传入的 ip_list 是有效的
+    if ip_list:
+        proxy = random.choice(ip_list)  # 使用传入的 ip 列表
         proxy_handler = urllib.request.ProxyHandler({'http': proxy.get("http"), 'https': proxy.get("https")})
         opener = urllib.request.build_opener(proxy_handler)
         urllib.request.install_opener(opener)
+    else:
+        print("未提供有效的代理 IP 列表")
+        return None
 
-    request = urllib.request.Request(url, headers=heads())
+    # 使用验证过的 User-Agent 构建请求头
+    request = urllib.request.Request(url, headers={"User-Agent": verified_user_agent})
     html = ""
 
     try:
         response = urllib.request.urlopen(request)
         html = response.read().decode("utf-8")
-
     except urllib.error.URLError as e:
         if hasattr(e, 'code'):
             print(e.code)
@@ -220,11 +227,23 @@ def getData(url, ip):
 
 if __name__ == '__main__':
     try:
-        # 测试 User-Agent 头部信息
-        user_agent_test_result = check_user_agent() == heads()
-        if not user_agent_test_result:
-            raise ValueError("User-Agent 检查失败")
-        print(f"User-Agent 测试结果: {user_agent_test_result}")
+        # 初始化通过验证的 User-Agent 列表
+        verified_user_agents = []
+
+        # 生成多个 User-Agent
+        user_agents = [heads()["User-Agent"] for _ in range(5)]  # 可根据需要调整生成的数量
+
+        # 并行验证 User-Agent
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(check_user_agent, ua) for ua in user_agents]
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result:
+                    verified_user_agents.append(result)
+
+        # 确保至少有一个验证通过的 User-Agent
+        if not verified_user_agents:
+            raise ValueError("没有验证通过的 User-Agent，无法继续执行")
 
         # 获取并解析代理IP列表
         page = 3  # 你可以根据需要调整页码
@@ -235,9 +254,12 @@ if __name__ == '__main__':
             if ip_list:
                 valid_proxy_list = check_ip(ip_list)
 
-                # 使用有效的代理IP请求数据
-                data = getData(url, valid_proxy_list)
-                print(f"抓取的数据: {data}")
+                # 使用有效的代理IP和通过验证的 User-Agent 请求数据
+                # 随机选择一个通过验证的 User-Agent 进行请求
+                for _ in range(5):  # 可以进行多次数据抓取
+                    selected_user_agent = random.choice(verified_user_agents)
+                    data = getData(url, valid_proxy_list)
+                    print(f"抓取的数据: {data}")
             else:
                 raise ValueError("未能解析到任何代理IP")
         else:
