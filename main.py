@@ -36,17 +36,19 @@ url = 'https://www.zhihu.com'
 # ip list
 # URL: https://www.kuaidaili.com/free
 # 这个网站有免费的国外代理渠道
-def send_ip_request(page):
-    print("=============正在抓取第{}页===========".format(page))
-    base_url = 'https://www.kuaidaili.com/free/fps/{}/'.format(page)
+def send_ip_request(page, user_agent):
+    print("=============正在抓取第{}页代理列表===========".format(page))
+    base_url = 'https://www.kuaidaili.com/free/fps/{}'.format(page)
+    headers = {'User-Agent': user_agent}
 
     try:
-        response = urllib.request.urlopen(urllib.request.Request(base_url, headers=heads()))
+        # 使用本机IP抓取代理网站，但加上随机生成的User-Agent
+        response = urllib.request.urlopen(urllib.request.Request(base_url, headers=headers))
         data = response.read().decode('utf-8')
         time.sleep(1)  # 避免请求过快
         return data
     except Exception as e:
-        print(f"抓取第{page}页时出错: {e}")
+        print(f"抓取第{page}页代理列表时出错: {e}")
         return None
 
 
@@ -185,16 +187,16 @@ def can_fetch(url, user_agent=None):
 def askURL(url, ip_list, verified_user_agent):
     if not can_fetch(url, verified_user_agent):
         print(f"访问被 robots.txt 禁止: {url}")
-        return
+        return None
 
-    # 确保传入的 ip_list 是有效的
+    # 确保传入的 ip_list 是有效的，如果没有代理 IP 就终止请求
     if ip_list:
-        proxy = random.choice(ip_list)  # 使用传入的 ip 列表
+        proxy = random.choice(ip_list)  # 使用传入的代理 IP 列表中的一个
         proxy_handler = urllib.request.ProxyHandler({'http': proxy.get("http"), 'https': proxy.get("https")})
         opener = urllib.request.build_opener(proxy_handler)
         urllib.request.install_opener(opener)
     else:
-        print("未提供有效的代理 IP 列表")
+        print("没有可用的代理 IP，终止请求，避免使用本机 IP")
         return None
 
     # 使用验证过的 User-Agent 构建请求头
@@ -206,16 +208,18 @@ def askURL(url, ip_list, verified_user_agent):
         html = response.read().decode("utf-8")
     except urllib.error.URLError as e:
         if hasattr(e, 'code'):
-            print(e.code)
+            print(f"HTTP 错误: {e.code}")
         if hasattr(e, 'reason'):
-            print(e.reason)
+            print(f"URL 错误原因: {e.reason}")
+    except Exception as e:
+        print(f"未知错误: {e}")
 
     return html
 
 
-def getData(url, ip):
+def getData(url, ip_list, verified_user_agent):
     try:
-        html = askURL(url, ip)
+        html = askURL(url, ip_list, verified_user_agent)  # 传递验证通过的 User-Agent
         if not html:
             return []
 
@@ -233,6 +237,7 @@ def getData(url, ip):
     except ConnectionResetError as e:
         print(f"连接重置错误: {e}")
         return []
+
 
 
 if __name__ == '__main__':
@@ -255,25 +260,30 @@ if __name__ == '__main__':
         if not verified_user_agents:
             raise ValueError("没有验证通过的 User-Agent，无法继续执行")
 
-        # 获取并解析代理IP列表
-        page = 3  # 你可以根据需要调整页码
-        proxy_data = send_ip_request(page)
+        # 先检查 IP 池是否为空，如果为空则不进行代理网站的抓取
+        valid_proxy_list = []  # 代理 IP 池
 
-        if proxy_data:
-            ip_list = parse_ip_data(proxy_data)
-            if ip_list:
-                valid_proxy_list = check_ip(ip_list)
+        if not valid_proxy_list:  # 检查是否已有代理 IP
+            page = 1  # 可以根据需要调整页码
+            selected_user_agent = random.choice(verified_user_agents)  # 随机选择一个验证通过的 User-Agent
+            proxy_data = send_ip_request(page, {"User-Agent": selected_user_agent})  # 确保传递的是带有 "User-Agent" 键的字典
 
-                # 使用有效的代理IP和通过验证的 User-Agent 请求数据
-                # 随机选择一个通过验证的 User-Agent 进行请求
-                for _ in range(5):  # 可以进行多次数据抓取
-                    selected_user_agent = random.choice(verified_user_agents)
-                    data = getData(url, valid_proxy_list)
-                    print(f"抓取的数据: {data}")
-            else:
-                raise ValueError("未能解析到任何代理IP")
+            if proxy_data:
+                ip_list = parse_ip_data(proxy_data)
+                if ip_list:
+                    valid_proxy_list = check_ip(ip_list)
+                else:
+                    print("未能解析到任何代理 IP")
+
+        # 确保有可用的代理 IP
+        if valid_proxy_list:
+            # 使用有效的代理 IP 和通过验证的 User-Agent 请求数据
+            for _ in range(5):  # 可以进行多次数据抓取
+                selected_user_agent = random.choice(verified_user_agents)
+                data = getData(url, valid_proxy_list)
+                print(f"抓取的数据: {data}")
         else:
-            raise ValueError("未能获取到任何代理IP数据")
+            print("没有可用的代理 IP，终止抓取操作")
 
     except ValueError as ve:
         print(f"发生错误 (代码 101): {ve}")
