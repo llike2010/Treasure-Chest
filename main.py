@@ -1,5 +1,6 @@
 # -*- coding = utf-8 -*-
 import random
+import json
 import time
 import urllib.error
 import urllib.parse
@@ -146,8 +147,17 @@ def check_ip(ip_list):
 
         try:
             # 发送 GET 请求，将获取的每个 IP 地址设置为代理
-            response = urllib.request.urlopen("http://httpbin.org/ip", timeout=3)
-            print(f'IP 地址：{ip.get("http")}有效')
+            response = urllib.request.urlopen("https://httpbin.org/ip", timeout=3)
+            result = response.read().decode('utf-8')
+            ip_info = json.loads(result)
+
+            # 获取 httpbin 返回的 IP
+            if ip_info.get("origin") == ip.get("http").split(":")[0]:
+                print(f'IP 地址：{ip.get("http")}有效')
+            else:
+                print(f'IP 地址：{ip.get("http")}无效, 与返回 IP 不匹配')
+                ip_list.pop(i)  # 从列表中移除无效IP
+
         except (urllib.error.URLError, urllib.error.HTTPError) as e:
             # 失败则输出 IP 地址无效，并从列表中移除
             print(f'IP 地址：{ip.get("http")}无效, 原因: {e}')
