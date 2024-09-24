@@ -1,14 +1,28 @@
 # -*- coding = utf-8 -*-
-import random
-import json
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-import urllib.robotparser
-import concurrent.futures
-from lxml import etree
-from bs4 import BeautifulSoup
+# 内置库模块
+import random  # 生成随机数或随机选择
+import json  # 处理 JSON 数据，编码/解码 JSON
+import time  # 处理时间相关的操作（如延时）
+import urllib.error  # 处理 URL 请求中的错误
+import urllib.parse  # 解析和构建 URL
+import urllib.request  # 发起 HTTP 请求
+import urllib.robotparser  # 解析 robots.txt 文件，检查爬虫的合法性
+
+# 并发执行模块
+import concurrent.futures  # 用于多线程和多进程并发操作
+
+# HTML 解析库
+from lxml import etree  # 解析 XML 和 HTML 文档，使用 XPath 查找节点
+from bs4 import BeautifulSoup  # 解析 HTML/XML 文档，支持标签查找和选择器
+
+# Selenium 模块，用于浏览器自动化
+from selenium.webdriver.chrome.service import Service  # 启动和管理 ChromeDriver 服务
+from selenium.webdriver.chrome.options import Options  # 配置 Chrome 浏览器选项
+from selenium import webdriver  # 用于启动和控制 Chrome 浏览器实例
+from selenium.webdriver.common.by import By  # 查找页面元素的方式，如通过 ID、标签名等
+from selenium.webdriver.support.ui import WebDriverWait  # 显式等待，直到某个条件满足为止
+from selenium.webdriver.support import expected_conditions as EC  # 提供常用的条件判断，如元素是否可见
+
 
 # 1. Wikipedia
 # URL: https://en.wikipedia.org/wiki/Main_Page
@@ -36,37 +50,116 @@ url = 'https://www.zhihu.com'
 # ip list
 # URL: https://www.kuaidaili.com/free
 # 这个网站有免费的国外代理渠道
+
 def send_ip_request(page, user_agent):
-    print("=============正在抓取第{}页代理列表===========".format(page))
-    base_url = 'https://www.kuaidaili.com/free/fps/{}'.format(page)
-    headers = {'User-Agent': user_agent}
+    print(f"============= 正在抓取第 {page} 页代理列表 =============")
+    base_url = f'https://www.kuaidaili.com/free/fps/{page}'
+
+    # 配置 Selenium 的 Chrome 选项
+    chrome_options = Options()
+
+    # 使用随机生成的 User-Agent
+    chrome_options.add_argument(f"user-agent = {user_agent}")  # 设置你的随机 User-Agent
+
+    # 确保无头模式被启用
+    chrome_options.add_argument('--headless=new')  # 新的无头模式参数，解决老版本的潜在问题
+    chrome_options.add_argument('--disable-gpu')  # 禁用 GPU，防止渲染问题
+    chrome_options.add_argument('--no-sandbox')  # 禁用沙盒模式，避免某些环境问题
+    chrome_options.add_argument('--disable-dev-shm-usage')  # 共享内存文件系统问题
+
+    # 进一步伪装为普通浏览器
+    chrome_options.add_argument('--disable-blink-features = AutomationControlled')  # 防止检测为自动化浏览器
+    chrome_options.add_argument('--disable-infobars')  # 禁用 "Chrome is being controlled by automated software" 信息条
+    chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])  # 防止某些检测
+
+    # 指定 ChromeDriver 的路径
+    driver_path = r'D:\chromedriver-win64\chromedriver.exe'  # 替换为 ChromeDriver 的实际路径
+    service = Service(executable_path=driver_path)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
-        # 使用本机IP抓取代理网站，但加上随机生成的User-Agent
-        response = urllib.request.urlopen(urllib.request.Request(base_url, headers=headers))
-        data = response.read().decode('utf-8')
-        time.sleep(1)  # 避免请求过快
+        # 使用 Selenium 加载目标页面
+        driver.get(base_url)
+        print("页面加载成功")
+
+        # 智能等待页面中的代理IP表格加载完成
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "table-free-proxy")))
+
+        # 获取页面的 HTML 内容
+        data = driver.page_source
+        print(f"成功获取页面 HTML 内容")
+
         return data
+
     except Exception as e:
-        print(f"抓取第{page}页代理列表时出错: {e}")
+        import traceback
+        print(f"抓取第 {page} 页代理列表时出错: {e}")
+        print(traceback.format_exc())  # 输出详细的错误堆栈信息
         return None
+
+    finally:
+        # 确保浏览器关闭
+        driver.quit()
+#原推荐代码修改，但是目标网站似乎变成了异步同步，改用模拟
+# def send_ip_request(page, user_agent):
+#     print("=============正在抓取第{}页代理列表===========".format(page))
+#     base_url = 'https://www.kuaidaili.com/free/fps/{}'.format(page)
+#     # headers = {'User-Agent': user_agent}
+#     # 确保打印 headers 信息并显示其格式
+#     print(f"爬取代理IP池子所使用的 User-Agent 信息: {user_agent}, 其格式为: {type(user_agent)}")
+#     # print(f"完整的 headers 信息: {headers}, 其格式为: {type(headers)}")
+#
+#     try:
+#         # 使用本机IP抓取代理网站，但加上随机生成的User-Agent
+#         RpUrl = urllib.request.Request(url=base_url, headers=user_agent)
+#         print(f"爬取代理ip池子request函数已生效 信息: {RpUrl}, 其格式为: {type(RpUrl)}")
+#
+#         response = urllib.request.urlopen(RpUrl)
+#         print(f"代理ip池子信息已获得 信息: {response}, 其格式为: {type(response)}")
+#
+#         data = response.read().decode('utf-8')
+#
+#         time.sleep(1)  # 避免请求过快
+#         print(data)
+#         return data
+#     except Exception as e:
+#         print(f"抓取第{page}页代理列表时出错: {e}")
+#         return None
 
 
 def parse_ip_data(data):
     proxy_list = []
+
+    # 解析HTML数据
     html_data = etree.HTML(data)
-    parse_list = html_data.xpath('//table[@class="table table-bordered table-striped"]/tbody/tr')
+
+    # 定位到包含代理IP信息的table
+    parse_list = html_data.xpath('//*[@id="table-free-proxy"]/div/table/tbody/tr')
+    print(f"找到 {len(parse_list)} 条代理IP信息")
 
     for tr in parse_list:
         proxies_dict = {}
-        http_type = tr.xpath('./td[4]/text()')[0]
+
+        # 提取第1列的IP地址
         ip_num = tr.xpath('./td[1]/text()')[0]
+
+        # 提取第2列的端口号
         port_num = tr.xpath('./td[2]/text()')[0]
 
+        # 提取第4列的HTTP类型
+        http_type = tr.xpath('./td[4]/text()')[0]
+
+        # 构建代理字典
         proxies_dict[http_type.lower()] = f"{ip_num}:{port_num}"
+
+        # 将解析的代理信息添加到代理列表中
         proxy_list.append(proxies_dict)
 
+    # 显示解析后的代理列表的长度
+    print(f"解析后的代理列表中含有 {len(proxy_list)} 条IP信息")
+
     return proxy_list
+
 
 # headers
 # UserAgent可行性测试
