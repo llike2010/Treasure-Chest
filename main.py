@@ -50,40 +50,40 @@ url = 'https://www.zhihu.com'
 # ip list
 # URL: https://www.kuaidaili.com/free
 # 这个网站有免费的国外代理渠道
-
 def send_ip_request(page, user_agent):
     print(f"============= 正在抓取第 {page} 页代理列表 =============")
     base_url = f'https://www.kuaidaili.com/free/fps/{page}'
 
-    # 配置 Selenium 的 Chrome 选项
+    # 配置 Selenium 的 Edge 选项
     chrome_options = Options()
 
-    # 使用随机生成的 User-Agent
-    chrome_options.add_argument(f"user-agent = {user_agent}")  # 设置你的随机 User-Agent
-
     # 确保无头模式被启用
-    chrome_options.add_argument('--headless=new')  # 新的无头模式参数，解决老版本的潜在问题
+    chrome_options.add_argument('--headless=new')  # 新的无头模式参数
     chrome_options.add_argument('--disable-gpu')  # 禁用 GPU，防止渲染问题
     chrome_options.add_argument('--no-sandbox')  # 禁用沙盒模式，避免某些环境问题
     chrome_options.add_argument('--disable-dev-shm-usage')  # 共享内存文件系统问题
+    chrome_options.add_argument('--single-process')  # 只运行一个进程
+    chrome_options.add_argument('--disable-software-rasterizer')  # 禁用软件光栅化
 
     # 进一步伪装为普通浏览器
-    chrome_options.add_argument('--disable-blink-features = AutomationControlled')  # 防止检测为自动化浏览器
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')  # 防止检测为自动化浏览器
     chrome_options.add_argument('--disable-infobars')  # 禁用 "Chrome is being controlled by automated software" 信息条
     chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])  # 防止某些检测
 
-    # 指定 ChromeDriver 的路径
-    driver_path = r'D:\chromedriver-win64\chromedriver.exe'  # 替换为 ChromeDriver 的实际路径
+    # 指定 ChromDriver 的路径
+    driver_path = r'D:\chromedriver-win64\chromedriver.exe'  # 替换为 EdgeDriver 的路径
     service = Service(executable_path=driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver = webdriver.Edge(service=service, options=chrome_options)
 
     try:
         # 使用 Selenium 加载目标页面
         driver.get(base_url)
         print("页面加载成功")
 
-        # 智能等待页面中的代理IP表格加载完成
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "table-free-proxy")))
+        # 等待动态内容加载完成
+        # time.sleep(2)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "table__free-proxy")))
+
 
         # 获取页面的 HTML 内容
         data = driver.page_source
@@ -92,14 +92,13 @@ def send_ip_request(page, user_agent):
         return data
 
     except Exception as e:
-        import traceback
         print(f"抓取第 {page} 页代理列表时出错: {e}")
-        print(traceback.format_exc())  # 输出详细的错误堆栈信息
         return None
 
     finally:
         # 确保浏览器关闭
         driver.quit()
+
 #原推荐代码修改，但是目标网站似乎变成了异步同步，改用模拟
 # def send_ip_request(page, user_agent):
 #     print("=============正在抓取第{}页代理列表===========".format(page))
@@ -134,7 +133,7 @@ def parse_ip_data(data):
     html_data = etree.HTML(data)
 
     # 定位到包含代理IP信息的table
-    parse_list = html_data.xpath('//*[@id="table-free-proxy"]/div/table/tbody/tr')
+    parse_list = html_data.xpath('//*[@id="table__free-proxy"]/div/table/tbody/tr')
     print(f"找到 {len(parse_list)} 条代理IP信息")
 
     for tr in parse_list:
@@ -332,9 +331,10 @@ def getData(url, ip_list, verified_user_agent):
         return []
 
 
-
 if __name__ == '__main__':
     try:
+        print("======= 初始化 User-Agent 阶段 =======")
+
         # 初始化通过验证的 User-Agent 列表
         verified_user_agents = []
 
@@ -342,39 +342,74 @@ if __name__ == '__main__':
         user_agents = [heads()["User-Agent"] for _ in range(5)]  # 可根据需要调整生成的数量
 
         # 并行验证 User-Agent
+        print("======= 验证 User-Agent 阶段开始 =======")
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(check_user_agent, ua) for ua in user_agents]
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 if result:
                     verified_user_agents.append(result)
+        print("======= 验证 User-Agent 阶段结束 =======")
 
         # 确保至少有一个验证通过的 User-Agent
         if not verified_user_agents:
             raise ValueError("没有验证通过的 User-Agent，无法继续执行")
 
+        print("======= 检查 IP 池阶段开始 =======")
         # 先检查 IP 池是否为空，如果为空则不进行代理网站的抓取
         valid_proxy_list = []  # 代理 IP 池
 
         if not valid_proxy_list:  # 检查是否已有代理 IP
-            page = 1  # 可以根据需要调整页码
-            selected_user_agent = random.choice(verified_user_agents)  # 随机选择一个验证通过的 User-Agent
-            proxy_data = send_ip_request(page, {"User-Agent": selected_user_agent})  # 确保传递的是带有 "User-Agent" 键的字典
+            # 设置抓取的页码范围，例如 1 到 3 页
+            start_page = 1
+            end_page = 3
 
-            if proxy_data:
-                ip_list = parse_ip_data(proxy_data)
-                if ip_list:
-                    valid_proxy_list = check_ip(ip_list)
-                else:
-                    print("未能解析到任何代理 IP")
+            valid_proxy_list = []
+
+            print(f"======= 抓取代理列表，页码范围：{start_page} 到 {end_page} =======")
+
+            # 遍历 1 到 3 页
+            for page in range(start_page, end_page + 1):
+                print(f"正在抓取第 {page} 页的代理列表...")
+
+                # 随机选择一个验证通过的 User-Agent
+                selected_user_agent = random.choice(verified_user_agents)
+
+                # 调用函数抓取当前页的代理数据
+                proxy_data = send_ip_request(page, {"User-Agent": selected_user_agent})
+
+                if proxy_data:
+                    # 解析抓取到的代理 IP 列表
+                    ip_list = parse_ip_data(proxy_data)
+                    print(f"ip池: {ip_list}")
+
+                    if ip_list:
+                        # 提取代理列表中的 IP 地址和端口
+                        valid_proxy_list = check_ip(ip_list)  # 传递提取的 IP 列表
+
+                        if valid_proxy_list:
+                            print(f"找到可用的代理 IP：{valid_proxy_list}")
+                            break  # 找到可用的代理 IP，退出循环
+                    else:
+                        print(f"第 {page} 页未能解析到任何代理 IP")
+
+                # 如果当前页没有获取到代理，继续抓取下一页
+                print(f"未能从第 {page} 页找到有效代理，继续下一页...")
+
+            if not valid_proxy_list:
+                print("在指定页码范围内未找到任何有效代理 IP")
+
+        print("======= 检查 IP 池阶段结束 =======")
 
         # 确保有可用的代理 IP
         if valid_proxy_list:
+            print("======= 开始抓取数据 =======")
             # 使用有效的代理 IP 和通过验证的 User-Agent 请求数据
             for _ in range(5):  # 可以进行多次数据抓取
                 selected_user_agent = random.choice(verified_user_agents)
                 data = getData(url, valid_proxy_list)
                 print(f"抓取的数据: {data}")
+            print("======= 数据抓取结束 =======")
         else:
             print("没有可用的代理 IP，终止抓取操作")
 
@@ -383,4 +418,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"发生未知错误 (代码 102): {e}")
     finally:
-        print("程序执行完毕。")
+        print("======= 程序执行完毕 =======")
+
