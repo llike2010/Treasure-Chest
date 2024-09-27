@@ -7,6 +7,7 @@ import urllib.error  # 处理 URL 请求中的错误
 import urllib.parse  # 解析和构建 URL
 import urllib.request  # 发起 HTTP 请求
 import urllib.robotparser  # 解析 robots.txt 文件，检查爬虫的合法性
+from urllib.error import URLError  # 解析请求错误
 
 # 并发执行模块
 import concurrent.futures  # 用于多线程和多进程并发操作
@@ -54,26 +55,21 @@ def send_ip_request(page, user_agent):
     print(f"============= 正在抓取第 {page} 页代理列表 =============")
     base_url = f'https://www.kuaidaili.com/free/fps/{page}'
 
-    # 配置 Selenium 的 Edge 选项
+    # 配置 Selenium 的 Chrome 选项
     chrome_options = Options()
-
-    # 确保无头模式被启用
-    chrome_options.add_argument('--headless=new')  # 新的无头模式参数
-    chrome_options.add_argument('--disable-gpu')  # 禁用 GPU，防止渲染问题
-    chrome_options.add_argument('--no-sandbox')  # 禁用沙盒模式，避免某些环境问题
-    chrome_options.add_argument('--disable-dev-shm-usage')  # 共享内存文件系统问题
+    chrome_options.add_argument('--headless=new')  # 启用无头模式
+    chrome_options.add_argument('--disable-gpu')  # 禁用 GPU
+    chrome_options.add_argument('--no-sandbox')  # 禁用沙盒模式
+    chrome_options.add_argument('--disable-dev-shm-usage')  # 解决共享内存问题
     chrome_options.add_argument('--single-process')  # 只运行一个进程
     chrome_options.add_argument('--disable-software-rasterizer')  # 禁用软件光栅化
-
-    # 进一步伪装为普通浏览器
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')  # 防止检测为自动化浏览器
-    chrome_options.add_argument('--disable-infobars')  # 禁用 "Chrome is being controlled by automated software" 信息条
-    chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])  # 防止某些检测
+    chrome_options.add_argument('--disable-infobars')  # 禁用信息条
 
-    # 指定 ChromDriver 的路径
-    driver_path = r'D:\chromedriver-win64\chromedriver.exe'  # 替换为 EdgeDriver 的路径
+    # 指定 ChromeDriver 的路径
+    driver_path = r'D:\chromedriver-win64\chromedriver.exe'  # 替换为实际的路径
     service = Service(executable_path=driver_path)
-    driver = webdriver.Edge(service=service, options=chrome_options)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
         # 使用 Selenium 加载目标页面
@@ -81,9 +77,7 @@ def send_ip_request(page, user_agent):
         print("页面加载成功")
 
         # 等待动态内容加载完成
-        # time.sleep(2)
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "table__free-proxy")))
-
 
         # 获取页面的 HTML 内容
         data = driver.page_source
@@ -128,34 +122,14 @@ def send_ip_request(page, user_agent):
 
 def parse_ip_data(data):
     proxy_list = []
-
-    # 解析HTML数据
     html_data = etree.HTML(data)
-
-    # 定位到包含代理IP信息的table
     parse_list = html_data.xpath('//*[@id="table__free-proxy"]/div/table/tbody/tr')
-    print(f"找到 {len(parse_list)} 条代理IP信息")
 
     for tr in parse_list:
-        proxies_dict = {}
-
-        # 提取第1列的IP地址
-        ip_num = tr.xpath('./td[1]/text()')[0]
-
-        # 提取第2列的端口号
-        port_num = tr.xpath('./td[2]/text()')[0]
-
-        # 提取第4列的HTTP类型
-        http_type = tr.xpath('./td[4]/text()')[0]
-
-        # 构建代理字典
-        proxies_dict[http_type.lower()] = f"{ip_num}:{port_num}"
-
-        # 将解析的代理信息添加到代理列表中
+        proxies_dict = {
+            tr.xpath('./td[4]/text()')[0].lower(): f"{tr.xpath('./td[1]/text()')[0]}:{tr.xpath('./td[2]/text()')[0]}"
+        }
         proxy_list.append(proxies_dict)
-
-    # 显示解析后的代理列表的长度
-    print(f"解析后的代理列表中含有 {len(proxy_list)} 条IP信息")
 
     return proxy_list
 
@@ -211,53 +185,61 @@ def heads():
     return head
 
 
-def check_user_agent(user_agent):
-    url = "https://httpbin.org/user-agent"
-    request = urllib.request.Request(url, headers={"User-Agent": user_agent})
+def validate_user_agents(user_agents):
+    def check_user_agent(user_agent):
+        url = "https://httpbin.org/user-agent"
+        request = urllib.request.Request(url, headers={"User-Agent": user_agent})
 
-    try:
-        response = urllib.request.urlopen(request)
-        user_agent_info = response.read().decode("utf-8")
-        print(f"来自 httpbin.org 的 User-Agent 信息: {user_agent_info}")
-        if user_agent in user_agent_info:
-            return user_agent  # 返回验证通过的 User-Agent
-        return None  # 验证失败
-    except urllib.error.HTTPError as e:
-        print(f"HTTPError: {e.code} - {e.reason}")
-    except urllib.error.URLError as e:
-        print(f"URLError: {e.reason}")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-    return None
+        try:
+            response = urllib.request.urlopen(request)
+            user_agent_info = response.read().decode("utf-8")
+            if user_agent in user_agent_info:
+                return user_agent
+        except Exception as e:
+            print(f"检查 User-Agent 时出错: {e}")
+            return None
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        return list(filter(None, executor.map(check_user_agent, user_agents)))
 
 
 # check the ip
-def check_ip(ip_list):
-    for i in range(len(ip_list) - 1, -1, -1):  # 逆序遍历列表
-        ip = ip_list[i]
-        proxy_handler = urllib.request.ProxyHandler({'http': ip.get("http"), 'https': ip.get("https")})
+def check_ip(ip_list, verified_user_agents):
+    def is_valid_ip(ip, headers):
+        http_proxy = ip.get("http")
+        https_proxy = ip.get("https") or ip.get("http(s)")
+
+        if not http_proxy and not https_proxy:
+            return None
+
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': http_proxy,
+            'https': https_proxy
+        })
         opener = urllib.request.build_opener(proxy_handler)
         urllib.request.install_opener(opener)
 
         try:
-            # 发送 GET 请求，将获取的每个 IP 地址设置为代理
-            response = urllib.request.urlopen("https://httpbin.org/ip", timeout=3)
-            result = response.read().decode('utf-8')
-            ip_info = json.loads(result)
+            request = urllib.request.Request("https://httpbin.org/ip", headers=headers)
+            response = urllib.request.urlopen(request, timeout=5)
+            ip_info = json.loads(response.read().decode('utf-8'))
 
-            # 获取 httpbin 返回的 IP
-            if ip_info.get("origin") == ip.get("http").split(":")[0]:
-                print(f'IP 地址：{ip.get("http")}有效')
-            else:
-                print(f'IP 地址：{ip.get("http")}无效, 与返回 IP 不匹配')
-                ip_list.pop(i)  # 从列表中移除无效IP
+            if http_proxy and ip_info.get("origin") == http_proxy.split(":")[0]:
+                return ip
+            elif https_proxy and ip_info.get("origin") == https_proxy.split(":")[0]:
+                return ip
+        except Exception as e:
+            print(f"验证 IP 时出错: {e}")
+            return None
 
-        except (urllib.error.URLError, urllib.error.HTTPError) as e:
-            # 失败则输出 IP 地址无效，并从列表中移除
-            print(f'IP 地址：{ip.get("http")}无效, 原因: {e}')
-            ip_list.pop(i)  # 从列表中移除无效IP
+        return None
 
-    return ip_list
+    headers = {"User-Agent": random.choice(verified_user_agents)}
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        valid_ips = list(executor.map(lambda ip: is_valid_ip(ip, headers), ip_list))
+
+    return [ip for ip in valid_ips if ip is not None]
 
 
 # Send request to the goal website
@@ -309,114 +291,92 @@ def askURL(url, ip_list, verified_user_agent):
     return html
 
 
-def getData(url, ip_list, verified_user_agent):
-    try:
-        html = askURL(url, ip_list, verified_user_agent)  # 传递验证通过的 User-Agent
-        if not html:
-            return []
+def getData(url, proxy_list, user_agent, retries=3):
+    proxy = random.choice(proxy_list)
+    proxy_handler = urllib.request.ProxyHandler({'http': proxy, 'https': proxy})
+    opener = urllib.request.build_opener(proxy_handler)
+    urllib.request.install_opener(opener)
 
-        time.sleep(2)  # 每次请求后暂停2秒
+    headers = {
+        'User-Agent': user_agent
+    }
 
-        datalist = []
-        soup = BeautifulSoup(html, 'html.parser')
+    request = urllib.request.Request(url, headers=headers)
 
-        # Collect information
-        for title in soup.find_all('h1'):
-            datalist.append(title.get_text())
+    for attempt in range(retries):
+        try:
+            response = urllib.request.urlopen(request, timeout=10)
+            return response.read().decode('utf-8')
+        except URLError as e:
+            print(f"尝试 {attempt + 1}/{retries} 请求失败: {e}")
+            time.sleep(2)  # 重试前等待一段时间
 
-        return datalist
-
-    except ConnectionResetError as e:
-        print(f"连接重置错误: {e}")
-        return []
+    print(f"所有 {retries} 次尝试都失败了")
+    return None
 
 
 if __name__ == '__main__':
     try:
         print("======= 初始化 User-Agent 阶段 =======")
-
-        # 初始化通过验证的 User-Agent 列表
-        verified_user_agents = []
-
         # 生成多个 User-Agent
         user_agents = [heads()["User-Agent"] for _ in range(5)]  # 可根据需要调整生成的数量
 
         # 并行验证 User-Agent
         print("======= 验证 User-Agent 阶段开始 =======")
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(check_user_agent, ua) for ua in user_agents]
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                if result:
-                    verified_user_agents.append(result)
-        print("======= 验证 User-Agent 阶段结束 =======")
+        verified_user_agents = validate_user_agents(user_agents)
+        print(f"======= 验证 User-Agent 阶段结束，共验证通过 {len(verified_user_agents)} 个 =======")
 
         # 确保至少有一个验证通过的 User-Agent
         if not verified_user_agents:
             raise ValueError("没有验证通过的 User-Agent，无法继续执行")
 
         print("======= 检查 IP 池阶段开始 =======")
-        # 先检查 IP 池是否为空，如果为空则不进行代理网站的抓取
         valid_proxy_list = []  # 代理 IP 池
 
-        if not valid_proxy_list:  # 检查是否已有代理 IP
-            # 设置抓取的页码范围，例如 1 到 3 页
+        if not valid_proxy_list:  # IP 池为空时才抓取代理网站
             start_page = 1
             end_page = 3
 
-            valid_proxy_list = []
-
             print(f"======= 抓取代理列表，页码范围：{start_page} 到 {end_page} =======")
 
-            # 遍历 1 到 3 页
             for page in range(start_page, end_page + 1):
                 print(f"正在抓取第 {page} 页的代理列表...")
 
                 # 随机选择一个验证通过的 User-Agent
                 selected_user_agent = random.choice(verified_user_agents)
 
-                # 调用函数抓取当前页的代理数据
+                # 抓取当前页的代理数据
                 proxy_data = send_ip_request(page, {"User-Agent": selected_user_agent})
 
                 if proxy_data:
                     # 解析抓取到的代理 IP 列表
                     ip_list = parse_ip_data(proxy_data)
-                    print(f"ip池: {ip_list}")
+                    print(f"解析出的代理 IP 列表：{ip_list}")
 
                     if ip_list:
-                        # 提取代理列表中的 IP 地址和端口
-                        valid_proxy_list = check_ip(ip_list)  # 传递提取的 IP 列表
+                        # 验证解析出的代理 IP
+                        valid_proxy_list = check_ip(ip_list, verified_user_agents)
 
                         if valid_proxy_list:
                             print(f"找到可用的代理 IP：{valid_proxy_list}")
                             break  # 找到可用的代理 IP，退出循环
                     else:
-                        print(f"第 {page} 页未能解析到任何代理 IP")
+                        print("未能解析出有效的代理 IP，继续下一页...")
+                else:
+                    print("未能获取当前页的代理数据，继续下一页...")
 
-                # 如果当前页没有获取到代理，继续抓取下一页
-                print(f"未能从第 {page} 页找到有效代理，继续下一页...")
-
-            if not valid_proxy_list:
-                print("在指定页码范围内未找到任何有效代理 IP")
-
-        print("======= 检查 IP 池阶段结束 =======")
-
-        # 确保有可用的代理 IP
         if valid_proxy_list:
-            print("======= 开始抓取数据 =======")
-            # 使用有效的代理 IP 和通过验证的 User-Agent 请求数据
-            for _ in range(5):  # 可以进行多次数据抓取
-                selected_user_agent = random.choice(verified_user_agents)
-                data = getData(url, valid_proxy_list)
-                print(f"抓取的数据: {data}")
-            print("======= 数据抓取结束 =======")
-        else:
-            print("没有可用的代理 IP，终止抓取操作")
+            print("======= 启动抓取阶段 =======")
+            target_url = "https://www.zhihu.com"  # 替换为目标 URL
+            result_html = askURL(target_url, valid_proxy_list, random.choice(verified_user_agents))
 
-    except ValueError as ve:
-        print(f"发生错误 (代码 101): {ve}")
+            if result_html:
+                print("成功获取目标页面 HTML 内容")
+            else:
+                print("获取目标页面 HTML 内容失败")
+        else:
+            print("未找到可用的代理 IP，无法继续抓取目标网站")
+
     except Exception as e:
-        print(f"发生未知错误 (代码 102): {e}")
-    finally:
-        print("======= 程序执行完毕 =======")
+        print(f"程序出现错误: {e}")
 
