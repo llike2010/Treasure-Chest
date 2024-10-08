@@ -1,8 +1,10 @@
 # -*- coding = utf-8 -*-
 # 内置库模块
+import traceback
 import random  # 生成随机数或随机选择
 import json  # 处理 JSON 数据，编码/解码 JSON
 import time  # 处理时间相关的操作（如延时）
+import http.client
 import urllib.error  # 处理 URL 请求中的错误
 import urllib.parse  # 解析和构建 URL
 import urllib.request  # 发起 HTTP 请求
@@ -14,7 +16,7 @@ import concurrent.futures  # 用于多线程和多进程并发操作
 
 # HTML 解析库
 from lxml import etree  # 解析 XML 和 HTML 文档，使用 XPath 查找节点
-from bs4 import BeautifulSoup  # 解析 HTML/XML 文档，支持标签查找和选择器
+# from bs4 import BeautifulSoup  # 解析 HTML/XML 文档，支持标签查找和选择器
 
 # Selenium 模块，用于浏览器自动化
 from selenium.webdriver.chrome.service import Service  # 启动和管理 ChromeDriver 服务
@@ -23,7 +25,6 @@ from selenium import webdriver  # 用于启动和控制 Chrome 浏览器实例
 from selenium.webdriver.common.by import By  # 查找页面元素的方式，如通过 ID、标签名等
 from selenium.webdriver.support.ui import WebDriverWait  # 显式等待，直到某个条件满足为止
 from selenium.webdriver.support import expected_conditions as EC  # 提供常用的条件判断，如元素是否可见
-
 
 # 1. Wikipedia
 # URL: https://en.wikipedia.org/wiki/Main_Page
@@ -47,6 +48,77 @@ from selenium.webdriver.support import expected_conditions as EC  # 提供常用
 # URL
 url = 'https://www.zhihu.com'
 
+# headers
+# UserAgent可行性测试
+# URL: http://httpbin.org/user-agent
+# 这个网站可以检测并显示你的User-Agent字符串，并提供有关其的详细信息。你可以将你的爬虫User-Agent粘贴到这个网站上，查看它被识别为哪种浏览器或设备。
+def heads():
+    # 系统信息
+    system_information = {
+        "Windows NT 10.0; Win64; x64": ["Chrome", "Firefox", "Edge"],
+        "Windows NT 6.1; Win64; x64": ["Chrome", "Firefox", "Edge"],
+        "X11; Linux x86_64": ["Chrome", "Firefox"],
+        "Macintosh; Intel Mac OS X 10_15_7": ["Safari", "Chrome"],
+        "Macintosh; Intel Mac OS X 10_14_6": ["Safari", "Chrome"],
+        "Windows NT 6.3; WOW64": ["Chrome", "Firefox", "Edge"],
+        "Macintosh; Intel Mac OS X 10_13_6": ["Safari", "Chrome"]
+    }
+
+    # 浏览器内核
+    platform = {
+        "Chrome": "AppleWebKit/537.36",
+        "Safari": "AppleWebKit/605.1.15",
+        "Firefox": "Gecko/20100101",
+        "Edge": "AppleWebKit/537.36"
+    }
+
+    # 平台详细信息
+    platform_details = {
+        "Chrome": "(KHTML, like Gecko)",
+        "Safari": "(KHTML, like WebKit)",
+        "Firefox": "",
+        "Edge": "(KHTML, like Gecko)"
+    }
+
+    # 浏览器版本
+    extensions = {
+        "Chrome": "Chrome/91.0.4472.124",
+        "Safari": "Safari/605.1.15",
+        "Firefox": "Firefox/92.0",
+        "Edge": "Edge/18.18362"
+    }
+
+    # 随机选择系统和相应浏览器
+    system = random.choice(list(system_information.keys()))
+    browser = random.choice(system_information[system])
+
+    # 构建 User-Agent
+    user_agent = (
+        "Mozilla/5.0" + " (" + system + ") "
+        + platform[browser] + " "
+        + platform_details[browser] + " "
+        + extensions[browser]
+    )
+
+    return {"User-Agent": user_agent}
+
+def validate_user_agents(user_agents):
+    def check_user_agent(user_agent):
+        print(user_agent)
+        url = "https://httpbin.org/user-agent"
+        request = urllib.request.Request(url, headers={"User-Agent": user_agent})
+
+        try:
+            response = urllib.request.urlopen(request)
+            user_agent_info = response.read().decode("utf-8")
+            if user_agent in user_agent_info:
+                return user_agent
+        except Exception as e:
+            print(f"检查 User-Agent 时出错: {e}")
+            return None
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        return list(filter(None, executor.map(check_user_agent, user_agents)))
 
 # ip list
 # URL: https://www.kuaidaili.com/free
@@ -93,33 +165,6 @@ def send_ip_request(page, user_agent):
         # 确保浏览器关闭
         driver.quit()
 
-#原推荐代码修改，但是目标网站似乎变成了异步同步，改用模拟
-# def send_ip_request(page, user_agent):
-#     print("=============正在抓取第{}页代理列表===========".format(page))
-#     base_url = 'https://www.kuaidaili.com/free/fps/{}'.format(page)
-#     # headers = {'User-Agent': user_agent}
-#     # 确保打印 headers 信息并显示其格式
-#     print(f"爬取代理IP池子所使用的 User-Agent 信息: {user_agent}, 其格式为: {type(user_agent)}")
-#     # print(f"完整的 headers 信息: {headers}, 其格式为: {type(headers)}")
-#
-#     try:
-#         # 使用本机IP抓取代理网站，但加上随机生成的User-Agent
-#         RpUrl = urllib.request.Request(url=base_url, headers=user_agent)
-#         print(f"爬取代理ip池子request函数已生效 信息: {RpUrl}, 其格式为: {type(RpUrl)}")
-#
-#         response = urllib.request.urlopen(RpUrl)
-#         print(f"代理ip池子信息已获得 信息: {response}, 其格式为: {type(response)}")
-#
-#         data = response.read().decode('utf-8')
-#
-#         time.sleep(1)  # 避免请求过快
-#         print(data)
-#         return data
-#     except Exception as e:
-#         print(f"抓取第{page}页代理列表时出错: {e}")
-#         return None
-
-
 def parse_ip_data(data):
     proxy_list = []
     html_data = etree.HTML(data)
@@ -133,84 +178,17 @@ def parse_ip_data(data):
 
     return proxy_list
 
-
-# headers
-# UserAgent可行性测试
-# URL: http://httpbin.org/user-agent
-# 这个网站可以检测并显示你的User-Agent字符串，并提供有关其的详细信息。你可以将你的爬虫User-Agent粘贴到这个网站上，查看它被识别为哪种浏览器或设备。
-def heads():
-    system_information = [
-        "Windows NT 10.0; Win64; x64",
-        "Windows NT 6.1; Win64; x64",
-        "X11; Linux x86_64",
-        "Macintosh; Intel Mac OS X 10_15_7",
-        "Macintosh; Intel Mac OS X 10_14_6",
-        "Windows NT 6.3; WOW64",
-        "Macintosh; Intel Mac OS X 10_13_6"
-    ]
-
-    platform = [
-        "Gecko/20100101 Firefox/92.0",
-        "AppleWebKit/537.36 Chrome/91.0.4472.124",
-        "AppleWebKit/605.1.15 Safari/537.36",
-        "Gecko/20100101 Firefox/91.0",
-        "AppleWebKit/537.36 Chrome/90.0.4430.212",
-        "Gecko/20100101 Firefox/89.0"
-    ]
-
-    # noinspection SpellCheckingInspection
-    platform_details = [
-        " (KHTML, like Gecko) ",
-        "",
-        " (KHTML, like WebKit) ",
-        " (KHTML, like AppleWebKit) "
-    ]
-
-    extensions = [
-        "Safari/537.36",
-        "Safari/605.1.15",
-        "",
-        "Chrome/91.0.4472.124",
-        "Firefox/92.0",
-        "Edge/18.18362"
-    ]
-
-    head = {
-        "User-Agent": "Mozilla/5.0" + " (" + random.choice(system_information) + ") "
-                      + random.choice(platform)
-                      + random.choice(platform_details)
-                      + random.choice(extensions)
-    }
-
-    return head
-
-
-def validate_user_agents(user_agents):
-    def check_user_agent(user_agent):
-        url = "https://httpbin.org/user-agent"
-        request = urllib.request.Request(url, headers={"User-Agent": user_agent})
-
-        try:
-            response = urllib.request.urlopen(request)
-            user_agent_info = response.read().decode("utf-8")
-            if user_agent in user_agent_info:
-                return user_agent
-        except Exception as e:
-            print(f"检查 User-Agent 时出错: {e}")
-            return None
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        return list(filter(None, executor.map(check_user_agent, user_agents)))
-
-
 # check the ip
 def check_ip(ip_list, verified_user_agents):
-    def is_valid_ip(ip, headers):
+    def is_valid_ip(ip):
         http_proxy = ip.get("http")
         https_proxy = ip.get("https") or ip.get("http(s)")
 
         if not http_proxy and not https_proxy:
             return None
+
+        # 为每个 IP 分配一个独立的 User-Agent
+        headers = {"User-Agent": random.choice(verified_user_agents)}
 
         proxy_handler = urllib.request.ProxyHandler({
             'http': http_proxy,
@@ -228,19 +206,38 @@ def check_ip(ip_list, verified_user_agents):
                 return ip
             elif https_proxy and ip_info.get("origin") == https_proxy.split(":")[0]:
                 return ip
-        except Exception as e:
-            print(f"验证 IP 时出错: {e}")
+
+        except urllib.error.HTTPError as e:
+            if e.code == 400:
+                # 输出错误码和响应头
+                print(f"HTTP报400错误代码: {e.code} - {e.reason}, 请求头为: {headers}, 响应头为: {e.headers}")
+            else:
+                # 处理其他 HTTP 错误
+                print(f"HTTP 错误: {e.code} - {e.reason}")
             return None
 
-        return None
+        except urllib.error.URLError as e:
+            # 处理 URL 相关的错误（比如连接问题、无法解析主机等）
+            print(f"URL 错误: {e.reason}, 请求头为: {headers}")
+            return None
 
-    headers = {"User-Agent": random.choice(verified_user_agents)}
+        except http.client.BadStatusLine as e:
+            print(f"BadStatusLine 错误: {e}, 请求头为: {headers}")
+            # 可能的 HTML 响应内容
+            return None
 
+        except Exception as e:
+            # 处理其他未知错误，输出完整堆栈信息
+            print(f"验证 IP 时出错: {e}")
+            traceback.print_exc()
+            return None
+
+    # 使用 ThreadPoolExecutor 并为每个 IP 进行独立验证
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        valid_ips = list(executor.map(lambda ip: is_valid_ip(ip, headers), ip_list))
+        valid_ips = list(executor.map(is_valid_ip, ip_list))
 
+    # 返回验证通过的 IP 列表
     return [ip for ip in valid_ips if ip is not None]
-
 
 # Send request to the goal website
 # Make sure about the website allows to fetch
@@ -257,7 +254,6 @@ def can_fetch(url, user_agent=None):
 
     return rp.can_fetch(user_agent, url)
 
-
 def askURL(url, ip_list, verified_user_agent):
     if not can_fetch(url, verified_user_agent):
         print(f"访问被 robots.txt 禁止: {url}")
@@ -266,7 +262,7 @@ def askURL(url, ip_list, verified_user_agent):
     # 确保传入的 ip_list 是有效的，如果没有代理 IP 就终止请求
     if ip_list:
         proxy = random.choice(ip_list)  # 使用传入的代理 IP 列表中的一个
-        proxy_handler = urllib.request.ProxyHandler({'http': proxy.get("http"), 'https': proxy.get("https")})
+        proxy_handler = urllib.request.ProxyHandler({'http': proxy.get("http"), 'https': proxy.get("http(s)")})
         opener = urllib.request.build_opener(proxy_handler)
         urllib.request.install_opener(opener)
     else:
@@ -289,7 +285,6 @@ def askURL(url, ip_list, verified_user_agent):
         print(f"未知错误: {e}")
 
     return html
-
 
 def getData(url, proxy_list, user_agent, retries=3):
     proxy = random.choice(proxy_list)
@@ -314,12 +309,11 @@ def getData(url, proxy_list, user_agent, retries=3):
     print(f"所有 {retries} 次尝试都失败了")
     return None
 
-
 if __name__ == '__main__':
     try:
         print("======= 初始化 User-Agent 阶段 =======")
         # 生成多个 User-Agent
-        user_agents = [heads()["User-Agent"] for _ in range(5)]  # 可根据需要调整生成的数量
+        user_agents = [heads()["User-Agent"] for _ in range(10)]  # 可根据需要调整生成的数量
 
         # 并行验证 User-Agent
         print("======= 验证 User-Agent 阶段开始 =======")
@@ -355,15 +349,18 @@ if __name__ == '__main__':
 
                     if ip_list:
                         # 验证解析出的代理 IP
-                        valid_proxy_list = check_ip(ip_list, verified_user_agents)
+                        valid_proxy_list.extend(check_ip(ip_list, verified_user_agents))
 
                         if valid_proxy_list:
                             print(f"找到可用的代理 IP：{valid_proxy_list}")
-                            break  # 找到可用的代理 IP，退出循环
+
                     else:
                         print("未能解析出有效的代理 IP，继续下一页...")
                 else:
                     print("未能获取当前页的代理数据，继续下一页...")
+
+        print("======= 检查 IP 池阶段结束 =======")
+        print(f"当前ip池可用代理为: {valid_proxy_list}")
 
         if valid_proxy_list:
             print("======= 启动抓取阶段 =======")
