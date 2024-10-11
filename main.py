@@ -138,6 +138,9 @@ def send_ip_request(page, user_agent):
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')  # 防止检测为自动化浏览器
     chrome_options.add_argument('--disable-infobars')  # 禁用信息条
 
+    # 在此处添加 User-Agent
+    chrome_options.add_argument(f"user-agent={user_agent}")
+
     # 指定 ChromeDriver 的路径
     driver_path = r'D:\chromedriver-win64\chromedriver.exe'  # 替换为实际的路径
     service = Service(executable_path=driver_path)
