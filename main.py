@@ -22,7 +22,7 @@ from selenium.webdriver.chrome.options import Options  # 配置 Chrome 浏览器
 from selenium import webdriver  # 用于启动和控制 Chrome 浏览器实例
 from selenium.webdriver.common.by import By  # 查找页面元素的方式,如通过 ID、标签名等
 from selenium.webdriver.support.ui import WebDriverWait  # 显式等待,直到某个条件满足为止
-from selenium.webdriver.support import expected_conditions as EC  # 提供常用的条件判断,如元素是否可见
+from selenium.webdriver.support import expected_conditions as ec  # 提供常用的条件判断,如元素是否可见
 
 # 1. Wikipedia
 # URL: https://en.wikipedia.org/wiki/Main_Page
@@ -45,6 +45,7 @@ from selenium.webdriver.support import expected_conditions as EC  # 提供常用
 
 # URL
 url = 'https://www.zhihu.com'
+
 
 # headers
 # UserAgent可行性测试
@@ -92,42 +93,44 @@ def heads():
 
     # 构建 User-Agent
     user_agent = (
-        "Mozilla/5.0" + " (" + system + ") "
-        + platform[browser] + " "
-        + platform_details[browser] + " "
-        + extensions[browser]
+            "Mozilla/5.0" + " (" + system + ") "
+            + platform[browser] + " "
+            + platform_details[browser] + " "
+            + extensions[browser]
     )
 
     return {"User-Agent": user_agent}
 
-def validate_user_agents(user_agents):
+
+def validate_user_agents(users_agents):
     def check_user_agent(user_agent):
         print(user_agent)
-        url = "https://httpbin.org/user-agent"
-        request = urllib.request.Request(url, headers={"User-Agent": user_agent})
+        goal_url = "https://httpbin.org/user-agent"
+        request = urllib.request.Request(goal_url, headers={"User-Agent": user_agent})
 
         try:
             response = urllib.request.urlopen(request)
             user_agent_info = response.read().decode("utf-8")
             if user_agent in user_agent_info:
                 return user_agent
-        except Exception as e:
-            print(f"检查 User-Agent 时出错: {e}")
+        except Exception as error:
+            print(f"检查 User-Agent 时出错: {error}")
             return None
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        return list(filter(None, executor.map(check_user_agent, user_agents)))
+        return list(filter(None, executor.map(check_user_agent, users_agents)))
+
 
 # ip list
 # URL: https://www.kuaidaili.com/free
 # 这个网站有免费的国外代理渠道
-def send_ip_request(page, user_agent):
-    print(f"============= 正在抓取第 {page} 页代理列表 =============")
-    base_url = f'https://www.kuaidaili.com/free/fps/{page}'
+def send_ip_request(web_page, user_agent):
+    print(f"============= 正在抓取第 {web_page} 页代理列表 =============")
+    base_url = f'https://www.kuaidaili.com/free/fps/{web_page}'
 
     # 配置 Selenium 的 Chrome 选项
     chrome_options = Options()
-    chrome_options.add_argument('--headless=new')  # 启用无头模式
+    chrome_options.add_argument('--headless')  # 启用无头模式
     chrome_options.add_argument('--disable-gpu')  # 禁用 GPU
     chrome_options.add_argument('--no-sandbox')  # 禁用沙盒模式
     chrome_options.add_argument('--disable-dev-shm-usage')  # 解决共享内存问题
@@ -150,7 +153,7 @@ def send_ip_request(page, user_agent):
         print("页面加载成功")
 
         # 等待动态内容加载完成
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "table__free-proxy")))
+        WebDriverWait(driver, 10).until(ec.presence_of_element_located((By.ID, "table__free-proxy")))
 
         # 获取页面的 HTML 内容
         data = driver.page_source
@@ -158,13 +161,14 @@ def send_ip_request(page, user_agent):
 
         return data
 
-    except Exception as e:
-        print(f"抓取第 {page} 页代理列表时出错: {e}")
+    except Exception as error:
+        print(f"抓取第 {web_page} 页代理列表时出错: {error}")
         return None
 
     finally:
         # 确保浏览器关闭
         driver.quit()
+
 
 def parse_ip_data(data):
     proxy_list = []
@@ -179,8 +183,9 @@ def parse_ip_data(data):
 
     return proxy_list
 
+
 # check the ip
-def check_ip(ip_list, verified_user_agents):
+def check_ip(web_ip_list, verified_users_agents):
     def is_valid_ip(ip):
         http_proxy = ip.get("http")
         https_proxy = ip.get("https") or ip.get("http(s)")
@@ -189,7 +194,7 @@ def check_ip(ip_list, verified_user_agents):
             return None
 
         # 为每个 IP 分配一个独立的 User-Agent
-        headers = {"User-Agent": random.choice(verified_user_agents)}
+        headers = {"User-Agent": random.choice(verified_users_agents)}
 
         proxy_handler = urllib.request.ProxyHandler({
             'http': http_proxy,
@@ -208,41 +213,43 @@ def check_ip(ip_list, verified_user_agents):
             elif https_proxy and ip_info.get("origin") == https_proxy.split(":")[0]:
                 return ip
 
-        except urllib.error.HTTPError as e:
-            if e.code == 400:
+        except urllib.error.HTTPError as error:
+            if error.code == 400:
                 # 输出错误码和响应头
-                print(f"HTTP报400错误代码: {e.code} - {e.reason}, 请求头为: {headers}, 响应头为: {e.headers}")
+                print(
+                    f"HTTP报400错误代码: {error.code} - {error.reason}, 请求头为: {headers}, 响应头为: {error.headers}")
             else:
                 # 处理其他 HTTP 错误
-                print(f"HTTP 错误: {e.code} - {e.reason}")
+                print(f"HTTP 错误: {error.code} - {error.reason}")
             return None
 
-        except urllib.error.URLError as e:
+        except urllib.error.URLError as error:
             # 处理 URL 相关的错误（比如连接问题、无法解析主机等）
-            print(f"URL 错误: {e.reason}, 请求头为: {headers}")
+            print(f"URL 错误: {error.reason}, 请求头为: {headers}")
             return None
 
-        except http.client.BadStatusLine as e:
-            print(f"BadStatusLine 错误: {e}, 请求头为: {headers}")
+        except http.client.BadStatusLine as error:
+            print(f"BadStatusLine 错误: {error}, 请求头为: {headers}")
             # 可能的 HTML 响应内容
             return None
 
-        except Exception as e:
+        except Exception as error:
             # 处理其他未知错误,输出完整堆栈信息
-            print(f"验证 IP 时出错: {e}")
+            print(f"验证 IP 时出错: {error}")
             traceback.print_exc()
             return None
 
     # 使用 ThreadPoolExecutor 并为每个 IP 进行独立验证
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        valid_ips = list(executor.map(is_valid_ip, ip_list))
+        valid_ips = list(executor.map(is_valid_ip, web_ip_list))
 
     # 返回验证通过的 IP 列表
     return [ip for ip in valid_ips if ip is not None]
 
+
 # Send request to the goal website
 # Make sure about the website allows to fetch
-def can_fetch(url, user_agent=None):
+def can_fetch(goal_url, user_agent=None):
     if user_agent is None:
         user_agent = heads()["User-Agent"]
     rp = urllib.robotparser.RobotFileParser()
@@ -253,39 +260,53 @@ def can_fetch(url, user_agent=None):
     rp.set_url(robots_url)
     rp.read()
 
-    return rp.can_fetch(user_agent, url)
+    return rp.can_fetch(user_agent, goal_url)
 
-def askURL(url, ip_list, verified_user_agent):
-    if not can_fetch(url, verified_user_agent):
-        print(f"访问被 robots.txt 禁止: {url}")
+
+def askURL(goal_url, verified_ip_list, verified_user_agent):
+    # 检查 robots.txt 规则
+    if not can_fetch(goal_url, verified_user_agent):
+        print(f"访问被 robots.txt 禁止: {goal_url}")
         return None
-
-    # 确保传入的 ip_list 是有效的,如果没有代理 IP 就终止请求
-    if ip_list:
-        proxy = random.choice(ip_list)  # 使用传入的代理 IP 列表中的一个
-        proxy_handler = urllib.request.ProxyHandler({'http': proxy.get("http"), 'https': proxy.get("http(s)")})
-        opener = urllib.request.build_opener(proxy_handler)
-        urllib.request.install_opener(opener)
     else:
-        print("没有可用的代理 IP,终止请求,避免使用本机 IP")
+        print("robot.txt 已允许")
+
+    # 确保传入的 ip_list 是有效的，如果没有代理 IP 就终止请求
+    if not verified_ip_list:
+        print("没有可用的代理 IP，终止请求，避免使用本机 IP")
         return None
+    else:
+        print("代理IP 已就位")
+    # 确保 verified_user_agent 是字符串类型
+    if not isinstance(verified_user_agent, str):
+        print(f"错误: verified_user_agent 不是字符串，值为: {verified_user_agent}")
+        return None
+    else:
+        print("user-agent 已确认")
+
+    proxy = random.choice(verified_ip_list)  # 随机选择一个代理
+    proxy_handler = urllib.request.ProxyHandler({
+        'http': proxy.get("http"),
+        'https': proxy.get("http(s)")
+    })
+    opener = urllib.request.build_opener(proxy_handler)
+    urllib.request.install_opener(opener)
 
     # 使用验证过的 User-Agent 构建请求头
-    request = urllib.request.Request(url, headers={"User-Agent": verified_user_agent})
+    request = urllib.request.Request(goal_url, headers={"User-Agent": verified_user_agent})
     html = ""
 
     try:
         response = urllib.request.urlopen(request)
         html = response.read().decode("utf-8")
-    except urllib.error.URLError as e:
-        if hasattr(e, 'code'):
-            print(f"HTTP 错误: {e.code}")
-        if hasattr(e, 'reason'):
-            print(f"URL 错误原因: {e.reason}")
-    except Exception as e:
-        print(f"未知错误: {e}")
+        return html
+    except urllib.error.URLError as error:
+        print(f"URL 错误原因: {error.reason}")
+    except Exception as error:
+        print(f"未知错误: {error}")
 
-    return html
+    return None
+
 
 if __name__ == '__main__':
     try:
@@ -340,9 +361,9 @@ if __name__ == '__main__':
         print("======= 检查 IP 池阶段结束 =======")
         print(f"当前ip池可用代理为: {valid_proxy_list}")
 
-        if valid_proxy_list:
+        if valid_proxy_list and verified_user_agents:
             print("======= 启动抓取阶段 =======")
-            target_url = "https://www.zhihu.com"  # 替换为目标 URL
+            target_url = "https://books.toscrape.com/"  # 替换为目标 URL
             result_html = askURL(target_url, valid_proxy_list, random.choice(verified_user_agents))
 
             if result_html:
@@ -350,7 +371,7 @@ if __name__ == '__main__':
             else:
                 print("获取目标页面 HTML 内容失败")
         else:
-            print("未找到可用的代理 IP,无法继续抓取目标网站")
+            print("未找到可用的代理 IP 或验证通过的 User-Agent，无法继续抓取目标网站")
 
     except Exception as e:
         print(f"程序出现错误: {e}")
