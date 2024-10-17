@@ -277,6 +277,7 @@ def askURL(goal_url, verified_ip_list, verified_user_agent):
         return None
     else:
         print("代理IP 已就位")
+
     # 确保 verified_user_agent 是字符串类型
     if not isinstance(verified_user_agent, str):
         print(f"错误: verified_user_agent 不是字符串，值为: {verified_user_agent}")
@@ -363,6 +364,7 @@ if __name__ == '__main__':
 
         if valid_proxy_list and verified_user_agents:
             print("======= 启动抓取阶段 =======")
+            # target_url = "https://www.zhihu.com/"
             target_url = "https://books.toscrape.com/"  # 替换为目标 URL
             result_html = askURL(target_url, valid_proxy_list, random.choice(verified_user_agents))
 
