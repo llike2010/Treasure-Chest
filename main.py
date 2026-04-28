@@ -4,6 +4,7 @@ from core.requester import Requester
 from logger import setup_logger
 from ua.user_agent import UserAgentPool
 
+
 def main():
     setup_logger()
 
