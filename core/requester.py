@@ -1,6 +1,6 @@
-import urllib.request
 import logging
-from ua.user_agent import UserAgentPool
+import urllib.request
+
 
 class Requester:
     def __init__(self, proxy_pool, ua_pool):

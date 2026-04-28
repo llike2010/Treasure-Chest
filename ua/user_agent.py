@@ -1,7 +1,8 @@
-import random
-import logging
-import urllib.request
 import concurrent.futures
+import logging
+import random
+import urllib.request
+
 
 class UserAgentPool:
     def __init__(self, size=10):
@@ -66,17 +67,23 @@ class UserAgentPool:
                     "https://httpbin.org/user-agent",
                     headers={"User-Agent": ua}
                 )
-                resp = urllib.request.urlopen(req, timeout=3)
-                data = resp.read().decode()
+                urllib.request.urlopen(req, timeout=3)
+                return ua
 
-                return ua if ua in data else None
-            except:
+            except Exception as e:
+                logging.debug(f"UA 验证失败: {ua} | 错误: {e}")
                 return None
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        logging.info("开始验证 User-Agent")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             results = list(executor.map(check, ua_list))
 
-        return [ua for ua in results if ua]
+        valid_ua = [ua for ua in results if ua]
+
+        logging.info(f"UA 验证完成: {len(valid_ua)}/{len(ua_list)} 可用")
+
+        return valid_ua
 
     def get(self):
         if not self.valid_user_agents:
