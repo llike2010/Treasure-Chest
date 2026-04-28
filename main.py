@@ -5,7 +5,6 @@ from logger import setup_logger
 from proxy.proxy_pool import ProxyPool
 from ua.user_agent import UserAgentPool
 
-
 def main():
     setup_logger()
 
